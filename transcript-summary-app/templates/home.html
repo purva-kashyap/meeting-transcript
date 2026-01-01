@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Transcript Summary - Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Meeting Transcript Summary Tool</h1>
+            <p class="subtitle">Get transcripts and summaries from your Zoom and Teams meetings</p>
+        </header>
+        
+        <main>
+            <div class="card">
+                <h2>Welcome!</h2>
+                <p>Enter your email address to retrieve your recorded meetings.</p>
+                
+                <form id="emailForm">
+                    <div class="form-group">
+                        <label for="email">Email Address:</label>
+                        <input 
+                            type="email" 
+                            id="email" 
+                            name="email" 
+                            placeholder="user@example.com" 
+                            required
+                            autocomplete="email"
+                        >
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="button" class="btn btn-zoom" onclick="getZoomMeetings()">
+                            📹 Get Zoom Meetings
+                        </button>
+                        <button type="button" class="btn btn-teams" onclick="getTeamsMeetings()">
+                            💬 Get Teams Meetings
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Loading meetings...</p>
+                </div>
+                
+                <div id="error" class="error" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function getEmail() {
+            const email = document.getElementById('email').value;
+            if (!email) {
+                showError('Please enter your email address');
+                return null;
+            }
+            return email;
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            hideLoading();
+        }
+
+        async function getZoomMeetings() {
+            const email = getEmail();
+            if (!email) return;
+
+            showLoading();
+
+            try {
+                const response = await fetch('/list/zoom/meetings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Store data in sessionStorage and redirect
+                    sessionStorage.setItem('meetings', JSON.stringify(data.meetings));
+                    sessionStorage.setItem('email', email);
+                    sessionStorage.setItem('meetingType', 'zoom');
+                    window.location.href = '/meetings.html';
+                } else {
+                    showError(data.error || 'Failed to retrieve Zoom meetings');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function getTeamsMeetings() {
+            const email = getEmail();
+            if (!email) return;
+
+            showLoading();
+
+            try {
+                const response = await fetch('/list/teams/meetings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Store data in sessionStorage and redirect
+                    sessionStorage.setItem('meetings', JSON.stringify(data.meetings));
+                    sessionStorage.setItem('email', email);
+                    sessionStorage.setItem('meetingType', 'teams');
+                    window.location.href = '/meetings.html';
+                } else {
+                    showError(data.error || 'Failed to retrieve Teams meetings');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Handle Enter key in email input
+        document.getElementById('email').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>
