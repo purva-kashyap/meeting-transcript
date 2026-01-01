@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meetings List</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="pageTitle">Your Meetings</h1>
+            <div class="nav-buttons">
+                <button class="btn btn-secondary" onclick="goBack()">← Back</button>
+                <button class="btn btn-secondary" onclick="goHome()">🏠 Home</button>
+            </div>
+        </header>
+        
+        <main>
+            <div class="card">
+                <div id="meetingsList" class="meetings-list">
+                    <!-- Meetings will be loaded here by JavaScript -->
+                </div>
+                
+                <div id="noMeetings" class="no-meetings" style="display: none;">
+                    <p>No recorded meetings found for this email address.</p>
+                    <button class="btn btn-primary" onclick="goHome()">Try Another Email</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function goHome() {
+            window.location.href = '/';
+        }
+
+        function goBack() {
+            window.history.back();
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function viewTranscript(meetingId) {
+            const meetingType = sessionStorage.getItem('meetingType');
+            sessionStorage.setItem('currentMeetingId', meetingId);
+            window.location.href = `/summary.html?type=${meetingType}&id=${meetingId}`;
+        }
+
+        function loadMeetings() {
+            const meetings = JSON.parse(sessionStorage.getItem('meetings') || '[]');
+            const meetingType = sessionStorage.getItem('meetingType');
+            const email = sessionStorage.getItem('email');
+
+            // Update page title
+            const titleElement = document.getElementById('pageTitle');
+            if (meetingType === 'zoom') {
+                titleElement.textContent = '📹 Zoom Meetings';
+            } else {
+                titleElement.textContent = '💬 Teams Meetings';
+            }
+
+            if (!meetings || meetings.length === 0) {
+                document.getElementById('noMeetings').style.display = 'block';
+                return;
+            }
+
+            const meetingsListDiv = document.getElementById('meetingsList');
+            meetingsListDiv.innerHTML = '';
+
+            meetings.forEach(meeting => {
+                const meetingCard = document.createElement('div');
+                meetingCard.className = 'meeting-card';
+
+                let meetingHTML = '';
+                
+                if (meetingType === 'zoom') {
+                    meetingHTML = `
+                        <div class="meeting-header">
+                            <h3>${meeting.topic}</h3>
+                            <span class="meeting-type-badge zoom">Zoom</span>
+                        </div>
+                        <div class="meeting-details">
+                            <p><strong>Meeting ID:</strong> ${meeting.meeting_id}</p>
+                            <p><strong>Date:</strong> ${formatDate(meeting.start_time)}</p>
+                            <p><strong>Duration:</strong> ${meeting.duration} minutes</p>
+                            <p><strong>Recordings:</strong> ${meeting.recording_count}</p>
+                        </div>
+                        <div class="meeting-actions">
+                            <button class="btn btn-primary" onclick="viewTranscript('${meeting.meeting_id}')">
+                                📝 View Transcript & Summary
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    meetingHTML = `
+                        <div class="meeting-header">
+                            <h3>${meeting.subject}</h3>
+                            <span class="meeting-type-badge teams">Teams</span>
+                        </div>
+                        <div class="meeting-details">
+                            <p><strong>Meeting ID:</strong> ${meeting.meeting_id}</p>
+                            <p><strong>Start:</strong> ${formatDate(meeting.start_time)}</p>
+                            <p><strong>End:</strong> ${formatDate(meeting.end_time)}</p>
+                            <p><strong>Participants:</strong> ${meeting.participants.length}</p>
+                        </div>
+                        <div class="meeting-actions">
+                            <button class="btn btn-primary" onclick="viewTranscript('${meeting.meeting_id}')">
+                                📝 View Transcript & Summary
+                            </button>
+                        </div>
+                    `;
+                }
+
+                meetingCard.innerHTML = meetingHTML;
+                meetingsListDiv.appendChild(meetingCard);
+            });
+        }
+
+        // Load meetings when page loads
+        window.addEventListener('DOMContentLoaded', loadMeetings);
+    </script>
+</body>
+</html>

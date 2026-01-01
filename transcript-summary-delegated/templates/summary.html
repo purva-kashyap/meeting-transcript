@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Transcript & Summary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-authenticated="{% if authenticated %}true{% else %}false{% endif %}">
+    <div class="container">
+        <header>
+            <h1 id="pageTitle">Meeting Transcript & Summary</h1>
+            <div class="nav-buttons">
+                <button class="btn btn-secondary" onclick="goBack()">← Back</button>
+                <button class="btn btn-secondary" onclick="goHome()">🏠 Home</button>
+            </div>
+        </header>
+        
+        <main>
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Loading transcript and generating summary...</p>
+            </div>
+
+            <div id="content" style="display: none;">
+                <div class="card">
+                    <h2>Original Transcript</h2>
+                    <div class="transcript-box">
+                        <pre id="transcript"></pre>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>AI-Generated Summary</h2>
+                    <div class="summary-box">
+                        <div id="summaryDisplay" class="summary-display"></div>
+                        <textarea id="summaryEdit" class="summary-edit" style="display: none;"></textarea>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button id="editBtn" class="btn btn-primary" onclick="toggleEdit()">
+                            ✏️ Edit Summary
+                        </button>
+                        <button id="saveBtn" class="btn btn-success" onclick="saveEdit()" style="display: none;">
+                            💾 Save Changes
+                        </button>
+                        <button id="cancelBtn" class="btn btn-secondary" onclick="cancelEdit()" style="display: none;">
+                            ❌ Cancel
+                        </button>
+                        <button id="sendBtn" class="btn btn-teams" onclick="sendToTeams()">
+                            📤 Send in Teams
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error" class="error" style="display: none;"></div>
+        </main>
+    </div>
+
+    <script>
+        let currentSummary = '';
+        let meetingData = null;
+        let isEditing = false;
+
+        function goHome() {
+            window.location.href = '/';
+        }
+
+        function goBack() {
+            window.history.back();
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+        }
+
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content').style.display = 'none';
+        }
+
+        function toggleEdit() {
+            if (!isEditing) {
+                // Enter edit mode
+                isEditing = true;
+                document.getElementById('summaryDisplay').style.display = 'none';
+                document.getElementById('summaryEdit').style.display = 'block';
+                document.getElementById('summaryEdit').value = currentSummary;
+                
+                document.getElementById('editBtn').style.display = 'none';
+                document.getElementById('saveBtn').style.display = 'inline-block';
+                document.getElementById('cancelBtn').style.display = 'inline-block';
+                document.getElementById('sendBtn').disabled = true;
+            }
+        }
+
+        function saveEdit() {
+            // Save the edited summary
+            currentSummary = document.getElementById('summaryEdit').value;
+            document.getElementById('summaryDisplay').textContent = currentSummary;
+            
+            // Exit edit mode
+            isEditing = false;
+            document.getElementById('summaryDisplay').style.display = 'block';
+            document.getElementById('summaryEdit').style.display = 'none';
+            
+            document.getElementById('editBtn').style.display = 'inline-block';
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+            document.getElementById('sendBtn').disabled = false;
+
+            // Show save confirmation
+            alert('Summary saved successfully!');
+        }
+
+        function cancelEdit() {
+            // Exit edit mode without saving
+            isEditing = false;
+            document.getElementById('summaryDisplay').style.display = 'block';
+            document.getElementById('summaryEdit').style.display = 'none';
+            
+            document.getElementById('editBtn').style.display = 'inline-block';
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+            document.getElementById('sendBtn').disabled = false;
+        }
+
+        async function sendToTeams() {
+            // Check if user is authenticated
+            const isAuthenticated = document.body.getAttribute('data-authenticated') === 'true';
+            if (!isAuthenticated) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const meetingType = urlParams.get('type');
+                const meetingId = urlParams.get('id');
+                
+                const shouldLogin = confirm('You need to sign in with Microsoft to send summaries to Teams. Sign in now?');
+                if (shouldLogin) {
+                    // Redirect to login with return parameters
+                    window.location.href = `/auth/login?return_type=${meetingType}&return_id=${meetingId}`;
+                }
+                return;
+            }
+
+            if (!meetingData) {
+                alert('Meeting data not available');
+                return;
+            }
+
+            const confirmSend = confirm('Send this summary to all meeting participants via Teams?');
+            if (!confirmSend) return;
+
+            try {
+                const response = await fetch('/teams/send-summary', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        meeting_id: meetingData.meeting_id,
+                        summary: currentSummary,
+                        participants: meetingData.participants || []
+                    })
+                });
+
+                if (response.status === 401) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const meetingType = urlParams.get('type');
+                    const meetingId = urlParams.get('id');
+                    
+                    const shouldLogin = confirm('Your session has expired. Sign in again to send to Teams?');
+                    if (shouldLogin) {
+                        // Redirect to login with return parameters
+                        window.location.href = `/auth/login?return_type=${meetingType}&return_id=${meetingId}`;
+                    }
+                    return;
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ ${data.message}`);
+                } else {
+                    alert('❌ Failed to send summary: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Network error: ' + error.message);
+            }
+        }
+
+        async function loadSummary() {
+            showLoading();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const meetingType = urlParams.get('type');
+            const meetingId = urlParams.get('id');
+
+            if (!meetingType || !meetingId) {
+                showError('Invalid meeting parameters');
+                return;
+            }
+
+            try {
+                let endpoint = '';
+                if (meetingType === 'zoom') {
+                    endpoint = `/zoom/meeting/${meetingId}/summary`;
+                } else {
+                    endpoint = `/teams/meeting/${meetingId}/summary`;
+                }
+
+                const response = await fetch(endpoint);
+                const data = await response.json();
+
+                if (data.success) {
+                    meetingData = data;
+                    
+                    // Display transcript
+                    document.getElementById('transcript').textContent = data.transcript;
+                    
+                    // Display summary
+                    currentSummary = data.summary;
+                    document.getElementById('summaryDisplay').textContent = currentSummary;
+                    
+                    // Update page title
+                    const titleElement = document.getElementById('pageTitle');
+                    if (meetingType === 'zoom') {
+                        titleElement.textContent = '📹 Zoom Meeting - Transcript & Summary';
+                    } else {
+                        titleElement.textContent = '💬 Teams Meeting - Transcript & Summary';
+                    }
+                    
+                    hideLoading();
+                } else {
+                    showError(data.error || 'Failed to load meeting data');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        // Load summary when page loads
+        window.addEventListener('DOMContentLoaded', loadSummary);
+    </script>
+</body>
+</html>

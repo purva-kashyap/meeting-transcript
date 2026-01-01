@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Transcript Summary - Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-authenticated="{% if authenticated %}true{% else %}false{% endif %}">
+    <div class="container">
+        <header>
+            <h1>Meeting Transcript Summary Tool</h1>
+            <p class="subtitle">Get transcripts and summaries from your Zoom and Teams meetings (Delegated Permissions)</p>
+            
+            {% if authenticated %}
+            <div class="user-info">
+                <p>👤 Signed in as: <strong>{{ user.name }}</strong> ({{ user.email }})</p>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Sign Out</button>
+            </div>
+            {% endif %}
+        </header>
+        
+        <main>
+            <div class="card">
+                <h2>Welcome!</h2>
+                
+                {% if not authenticated %}
+                <div class="auth-notice">
+                    <p>📢 <strong>Teams Meetings: Authentication Required</strong></p>
+                    <p>To access Teams meetings, sign in with your Microsoft account (uses delegated permissions).</p>
+                    <button class="btn btn-primary btn-large" onclick="initiateLogin()">
+                        🔐 Sign in with Microsoft
+                    </button>
+                </div>
+                <hr>
+                {% endif %}
+                
+                <p>Enter your email address to retrieve meetings:</p>
+                
+                <form id="emailForm">
+                    <div class="form-group">
+                        <label for="email">Email Address:</label>
+                        <input 
+                            type="email" 
+                            id="email" 
+                            name="email" 
+                            placeholder="user@example.com" 
+                            required
+                            autocomplete="email"
+                        >
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="button" class="btn btn-zoom" onclick="getZoomMeetings()">
+                            📹 Get Zoom Meetings
+                        </button>
+                        
+                        {% if authenticated %}
+                        <button type="button" class="btn btn-teams" onclick="getTeamsMeetings()">
+                            💬 Get Teams Meetings
+                        </button>
+                        {% else %}
+                        <button type="button" class="btn btn-teams btn-disabled" disabled title="Please sign in first">
+                            💬 Get Teams Meetings (Sign in required)
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+                
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Loading meetings...</p>
+                </div>
+                
+                <div id="error" class="error" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Get authentication status from data attribute
+        const isAuthenticated = document.body.getAttribute('data-authenticated') === 'true';
+        
+        function initiateLogin() {
+            // Redirect to authentication flow
+            window.location.href = '/auth/login';
+        }
+
+        function logout() {
+            window.location.href = '/auth/logout';
+        }
+
+        function getEmail() {
+            const email = document.getElementById('email').value;
+            if (!email) {
+                showError('Please enter your email address');
+                return null;
+            }
+            return email;
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            hideLoading();
+        }
+
+        async function getZoomMeetings() {
+            const email = getEmail();
+            if (!email) return;
+
+            showLoading();
+
+            try {
+                const response = await fetch('/list/zoom/meetings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    sessionStorage.setItem('meetings', JSON.stringify(data.meetings));
+                    sessionStorage.setItem('email', email);
+                    sessionStorage.setItem('meetingType', 'zoom');
+                    window.location.href = '/meetings.html';
+                } else {
+                    showError(data.error || 'Failed to retrieve Zoom meetings');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function getTeamsMeetings() {
+            if (!isAuthenticated) {
+                showError('Please sign in with Microsoft first');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/list/teams/meetings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+
+                if (response.status === 401) {
+                    showError('Session expired. Please sign in again.');
+                    setTimeout(() => {
+                        window.location.href = '/auth/login';
+                    }, 2000);
+                    return;
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    sessionStorage.setItem('meetings', JSON.stringify(data.meetings));
+                    sessionStorage.setItem('email', data.email);
+                    sessionStorage.setItem('meetingType', 'teams');
+                    window.location.href = '/meetings.html';
+                } else {
+                    showError(data.error || 'Failed to retrieve Teams meetings');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Handle Enter key in email input
+        document.getElementById('email').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>
