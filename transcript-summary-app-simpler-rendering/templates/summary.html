@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Transcript & Summary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                {% if meetingType == 'zoom' %}
+                📹 Zoom Meeting - Transcript & Summary
+                {% else %}
+                💬 Teams Meeting - Transcript & Summary
+                {% endif %}
+            </h1>
+            <div class="nav-buttons">
+                <button class="btn btn-secondary" onclick="window.history.back()">← Back</button>
+                <a href="/" class="btn btn-secondary">🏠 Home</a>
+            </div>
+        </header>
+        
+        <main>
+            {% if error %}
+            <div class="card">
+                <div class="error">{{ error }}</div>
+                <button class="btn btn-primary" onclick="window.history.back()">← Back</button>
+            </div>
+            {% elif message %}
+            <div class="card">
+                <div class="success">{{ message }}</div>
+            </div>
+            {% endif %}
+            
+            {% if transcript %}
+            <div class="card">
+                <h2>Original Transcript</h2>
+                <div class="transcript-box">
+                    <pre>{{ transcript }}</pre>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if summary %}
+            <div class="card">
+                <h2>AI-Generated Summary</h2>
+                <div class="summary-box">
+                    <div id="summaryDisplay" class="summary-display">{{ summary }}</div>
+                    <textarea id="summaryEdit" class="summary-edit" style="display: none;">{{ summary }}</textarea>
+                </div>
+                
+                <div class="button-group">
+                    <button id="editBtn" class="btn btn-primary" onclick="toggleEdit()">
+                        ✏️ Edit Summary
+                    </button>
+                    <button id="saveBtn" class="btn btn-success" onclick="saveEdit()" style="display: none;">
+                        💾 Save Changes
+                    </button>
+                    <button id="cancelBtn" class="btn btn-secondary" onclick="cancelEdit()" style="display: none;">
+                        ❌ Cancel
+                    </button>
+                    <form id="sendForm" action="/teams/send-summary" method="POST" style="display: inline;">
+                        <input type="hidden" name="meeting_id" value="{{ meeting_id or '' }}">
+                        <input type="hidden" id="summaryInput" name="summary" value="{{ summary or '' }}">
+                        <input type="hidden" name="participants" value='{{ (participants|tojson|safe) if participants else "[]" }}'>
+                        <button type="submit" class="btn btn-teams" onclick="return confirm('Send this summary to all meeting participants via Teams?')">
+                            📤 Send in Teams
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+
+    <script>
+        let currentSummary = {{ summary|tojson|safe if summary else '""' }};
+        let isEditing = false;
+
+        function toggleEdit() {
+            if (!isEditing) {
+                // Enter edit mode
+                isEditing = true;
+                document.getElementById('summaryDisplay').style.display = 'none';
+                document.getElementById('summaryEdit').style.display = 'block';
+                document.getElementById('summaryEdit').value = currentSummary;
+                
+                document.getElementById('editBtn').style.display = 'none';
+                document.getElementById('saveBtn').style.display = 'inline-block';
+                document.getElementById('cancelBtn').style.display = 'inline-block';
+            }
+        }
+
+        function saveEdit() {
+            // Save the edited summary
+            currentSummary = document.getElementById('summaryEdit').value;
+            document.getElementById('summaryDisplay').textContent = currentSummary;
+            
+            // Update hidden form input
+            const summaryInput = document.getElementById('summaryInput');
+            if (summaryInput) {
+                summaryInput.value = currentSummary;
+            }
+            
+            // Exit edit mode
+            isEditing = false;
+            document.getElementById('summaryDisplay').style.display = 'block';
+            document.getElementById('summaryEdit').style.display = 'none';
+            
+            document.getElementById('editBtn').style.display = 'inline-block';
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+
+            // Show save confirmation
+            alert('Summary saved successfully!');
+        }
+
+        function cancelEdit() {
+            // Exit edit mode without saving
+            isEditing = false;
+            document.getElementById('summaryDisplay').style.display = 'block';
+            document.getElementById('summaryEdit').style.display = 'none';
+            
+            document.getElementById('editBtn').style.display = 'inline-block';
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

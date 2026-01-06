@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meetings List</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                {% if meetingType == 'zoom' %}
+                📹 Zoom Meetings
+                {% else %}
+                💬 Teams Meetings
+                {% endif %}
+            </h1>
+            <div class="nav-buttons">
+                <a href="/" class="btn btn-secondary">🏠 Home</a>
+            </div>
+        </header>
+        
+        <main>
+            {% if error %}
+            <div class="card">
+                <div class="error">{{ error }}</div>
+                <a href="/" class="btn btn-primary">← Back to Home</a>
+            </div>
+            {% elif meetings %}
+            <div class="card">
+                <div class="meetings-list">
+                    {% for meeting in meetings %}
+                    <div class="meeting-card">
+                        {% if meetingType == 'zoom' %}
+                        <div class="meeting-header">
+                            <h3>{{ meeting.topic }}</h3>
+                            <span class="meeting-type-badge zoom">Zoom</span>
+                        </div>
+                        <div class="meeting-details">
+                            <p><strong>Meeting ID:</strong> {{ meeting.meeting_id }}</p>
+                            <p><strong>Date:</strong> {{ meeting.start_time }}</p>
+                            <p><strong>Duration:</strong> {{ meeting.duration }} minutes</p>
+                            <p><strong>Recordings:</strong> {{ meeting.recording_count }}</p>
+                        </div>
+                        <div class="meeting-actions">
+                            <a href="/zoom/meeting/{{ meeting.meeting_id }}/summary" class="btn btn-primary">
+                                📝 View Transcript & Summary
+                            </a>
+                        </div>
+                        {% else %}
+                        <div class="meeting-header">
+                            <h3>{{ meeting.subject }}</h3>
+                            <span class="meeting-type-badge teams">Teams</span>
+                        </div>
+                        <div class="meeting-details">
+                            <p><strong>Meeting ID:</strong> {{ meeting.meeting_id }}</p>
+                            <p><strong>Start:</strong> {{ meeting.start_time }}</p>
+                            <p><strong>End:</strong> {{ meeting.end_time }}</p>
+                            <p><strong>Participants:</strong> {{ meeting.participants|length }}</p>
+                        </div>
+                        <div class="meeting-actions">
+                            <a href="/teams/meeting/{{ meeting.meeting_id }}/summary" class="btn btn-primary">
+                                📝 View Transcript & Summary
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="no-meetings">
+                    <p>No recorded meetings found for this email address.</p>
+                    <a href="/" class="btn btn-primary">Try Another Email</a>
+                </div>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Transcript Summary - Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Meeting Transcript Summary Tool</h1>
+            <p class="subtitle">Get transcripts and summaries from your Zoom and Teams meetings</p>
+        </header>
+        
+        <main>
+            <div class="card">
+                <h2>Welcome!</h2>
+                <p>Enter your email address to retrieve your recorded meetings.</p>
+                
+                {% if error %}
+                <div class="error">{{ error }}</div>
+                {% endif %}
+                
+                <form id="emailForm" method="POST">
+                    <div class="form-group">
+                        <label for="email">Email Address:</label>
+                        <input 
+                            type="email" 
+                            id="email" 
+                            name="email" 
+                            placeholder="user@example.com" 
+                            required
+                            autocomplete="email"
+                        >
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="submit" name="meeting_type" value="zoom" formaction="/list/zoom/meetings" class="btn btn-zoom">
+                            📹 Get Zoom Meetings
+                        </button>
+                        <button type="submit" name="meeting_type" value="teams" formaction="/list/teams/meetings" class="btn btn-teams">
+                            💬 Get Teams Meetings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
