@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Microsoft Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Mock Microsoft Login</h1>
+            <p class="subtitle">Simulated authentication for testing</p>
+        </header>
+        
+        <main>
+            <div class="card">
+                <div class="mock-login-notice">
+                    <p><strong>⚠️ This is a mock login page for testing purposes</strong></p>
+                    <p>In production, you would be redirected to Microsoft's actual login page.</p>
+                </div>
+                
+                <form id="mockLoginForm" onsubmit="return handleMockLogin(event)">
+                    <div class="form-group">
+                        <label for="mockEmail">Email Address:</label>
+                        <input 
+                            type="email" 
+                            id="mockEmail" 
+                            value="user@example.com" 
+                            readonly
+                            class="readonly-input"
+                        >
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mockPassword">Password:</label>
+                        <input 
+                            type="password" 
+                            id="mockPassword" 
+                            value="********" 
+                            readonly
+                            class="readonly-input"
+                        >
+                    </div>
+                    
+                    <div class="mock-consent">
+                        <h3>Permissions Requested:</h3>
+                        <ul>
+                            <li>✓ Read your profile (User.Read)</li>
+                            <li>✓ Read your calendars (Calendars.Read)</li>
+                            <li>✓ Read your online meetings (OnlineMeetings.Read)</li>
+                            <li>✓ Read and write your chats (Chat.ReadWrite)</li>
+                            <li>✓ Send chat messages (ChatMessage.Send)</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">
+                            ✓ Accept & Sign In
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="cancelLogin()">
+                            ✗ Cancel
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Authenticating...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        async function handleMockLogin(event) {
+            event.preventDefault();
+            
+            document.getElementById('mockLoginForm').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const response = await fetch('/auth/mock-callback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'user@example.com'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Always redirect to the provided URL
+                    // This works whether in popup or same window
+                    window.location.href = data.redirect;
+                } else {
+                    alert('Login failed');
+                    document.getElementById('mockLoginForm').style.display = 'block';
+                    document.getElementById('loading').style.display = 'none';
+                }
+            } catch (error) {
+                alert('Login error: ' + error.message);
+                document.getElementById('mockLoginForm').style.display = 'block';
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+        
+        function cancelLogin() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>

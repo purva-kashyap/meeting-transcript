@@ -295,6 +295,130 @@ header h1 {
     font-size: 1rem;
 }
 
+/* Summary HTML Formatting */
+.summary-display ul, 
+.summary-display ol {
+    margin-left: 20px;
+    margin-bottom: 15px;
+    padding-left: 10px;
+}
+
+.summary-display ul {
+    list-style-type: disc;
+}
+
+.summary-display ol {
+    list-style-type: decimal;
+}
+
+.summary-display li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.summary-display h1, 
+.summary-display h2, 
+.summary-display h3,
+.summary-display h4,
+.summary-display h5,
+.summary-display h6 {
+    color: #002a58;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.summary-display h1 {
+    font-size: 1.8rem;
+}
+
+.summary-display h2 {
+    font-size: 1.5rem;
+}
+
+.summary-display h3 {
+    font-size: 1.3rem;
+}
+
+.summary-display p {
+    margin-bottom: 12px;
+    line-height: 1.6;
+}
+
+.summary-display strong,
+.summary-display b {
+    font-weight: 600;
+    color: #002a58;
+}
+
+.summary-display em,
+.summary-display i {
+    font-style: italic;
+}
+
+.summary-display a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.summary-display a:hover {
+    text-decoration: underline;
+}
+
+.summary-display blockquote {
+    border-left: 4px solid #002a58;
+    padding-left: 15px;
+    margin: 15px 0;
+    color: #666;
+    font-style: italic;
+}
+
+.summary-display code {
+    background-color: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.summary-display pre {
+    background-color: #f4f4f4;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    margin: 15px 0;
+}
+
+.summary-display pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.summary-display hr {
+    border: none;
+    border-top: 1px solid #ddd;
+    margin: 20px 0;
+}
+
+.summary-display table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+}
+
+.summary-display table th,
+.summary-display table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.summary-display table th {
+    background-color: #f4f4f4;
+    font-weight: 600;
+    color: #002a58;
+}
+
 .summary-edit {
     width: 100%;
     min-height: 300px;

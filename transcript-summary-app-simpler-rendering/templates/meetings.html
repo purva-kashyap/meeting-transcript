@@ -60,7 +60,7 @@
                             <p><strong>Participants:</strong> {{ meeting.participants|length }}</p>
                         </div>
                         <div class="meeting-actions">
-                            <a href="/teams/meeting/{{ meeting.meeting_id }}/summary" class="btn btn-primary">
+                            <a href="/teams/meeting/{{ meeting.meeting_id }}/summary?email={{ email }}" class="btn btn-primary">
                                 📝 View Transcript & Summary
                             </a>
                         </div>

@@ -19,6 +19,11 @@
             <div class="nav-buttons">
                 <button class="btn btn-secondary" onclick="window.history.back()">← Back</button>
                 <a href="/" class="btn btn-secondary">🏠 Home</a>
+                {% if user %}
+                <span style="margin-left: 10px; font-size: 0.9em; color: #666;">
+                    👤 {{ user.name or user.email }}
+                </span>
+                {% endif %}
             </div>
         </header>
         
@@ -47,7 +52,7 @@
             <div class="card">
                 <h2>AI-Generated Summary</h2>
                 <div class="summary-box">
-                    <div id="summaryDisplay" class="summary-display">{{ summary }}</div>
+                    <div id="summaryDisplay" class="summary-display">{{ summary|safe }}</div>
                     <textarea id="summaryEdit" class="summary-edit" style="display: none;">{{ summary }}</textarea>
                 </div>
                 
@@ -61,14 +66,18 @@
                     <button id="cancelBtn" class="btn btn-secondary" onclick="cancelEdit()" style="display: none;">
                         ❌ Cancel
                     </button>
-                    <form id="sendForm" action="/teams/send-summary" method="POST" style="display: inline;">
-                        <input type="hidden" name="meeting_id" value="{{ meeting_id or '' }}">
-                        <input type="hidden" id="summaryInput" name="summary" value="{{ summary or '' }}">
-                        <input type="hidden" name="participants" value='{{ (participants|tojson|safe) if participants else "[]" }}'>
-                        <button type="submit" class="btn btn-teams" onclick="return confirm('Send this summary to all meeting participants via Teams?')">
-                            📤 Send in Teams
-                        </button>
-                    </form>
+                    
+                    {% if meetingType == 'teams' %}
+                    {% if authenticated %}
+                    <button type="button" class="btn btn-teams" onclick="sendToTeams()">
+                        📤 Send in Teams
+                    </button>
+                    {% else %}
+                    <button type="button" class="btn btn-teams" onclick="loginToSend()">
+                        🔐 Login to Post in Teams
+                    </button>
+                    {% endif %}
+                    {% endif %}
                 </div>
             </div>
             {% endif %}
@@ -81,7 +90,6 @@
 
         function toggleEdit() {
             if (!isEditing) {
-                // Enter edit mode
                 isEditing = true;
                 document.getElementById('summaryDisplay').style.display = 'none';
                 document.getElementById('summaryEdit').style.display = 'block';
@@ -94,17 +102,9 @@
         }
 
         function saveEdit() {
-            // Save the edited summary
             currentSummary = document.getElementById('summaryEdit').value;
-            document.getElementById('summaryDisplay').textContent = currentSummary;
+            document.getElementById('summaryDisplay').innerHTML = currentSummary;
             
-            // Update hidden form input
-            const summaryInput = document.getElementById('summaryInput');
-            if (summaryInput) {
-                summaryInput.value = currentSummary;
-            }
-            
-            // Exit edit mode
             isEditing = false;
             document.getElementById('summaryDisplay').style.display = 'block';
             document.getElementById('summaryEdit').style.display = 'none';
@@ -113,12 +113,10 @@
             document.getElementById('saveBtn').style.display = 'none';
             document.getElementById('cancelBtn').style.display = 'none';
 
-            // Show save confirmation
             alert('Summary saved successfully!');
         }
 
         function cancelEdit() {
-            // Exit edit mode without saving
             isEditing = false;
             document.getElementById('summaryDisplay').style.display = 'block';
             document.getElementById('summaryEdit').style.display = 'none';
@@ -126,6 +124,50 @@
             document.getElementById('editBtn').style.display = 'inline-block';
             document.getElementById('saveBtn').style.display = 'none';
             document.getElementById('cancelBtn').style.display = 'none';
+        }
+
+        function loginToSend() {
+            const meetingId = '{{ meeting_id or "" }}';
+            const meetingType = '{{ meetingType or "" }}';
+            const loginUrl = `/auth/login?return_type=${meetingType}&return_id=${meetingId}`;
+            
+            // For simplicity and to avoid session issues with popups, always redirect in same window
+            // This ensures the session cookie is properly set and recognized
+            window.location.href = loginUrl;
+        }
+
+        function sendToTeams() {
+            if (!confirm('Send this summary to all meeting participants via Teams?')) {
+                return;
+            }
+
+            fetch('/teams/send-summary', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    meeting_id: '{{ meeting_id or "" }}',
+                    summary: currentSummary,
+                    participants: {{ (participants|tojson|safe) if participants else "[]" }}
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Summary sent successfully to Teams!');
+                    // Optionally reload to update UI
+                    // window.location.reload();
+                } else if (data.error && data.error.includes('Not authenticated')) {
+                    alert('⚠️ Your session has expired. Please log in again.');
+                    loginToSend();
+                } else {
+                    alert('❌ Failed to send summary: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                alert('❌ Error sending summary: ' + error.message);
+            });
         }
     </script>
 </body>

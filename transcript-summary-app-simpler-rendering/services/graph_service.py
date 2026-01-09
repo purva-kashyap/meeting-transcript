@@ -106,7 +106,7 @@ class GraphService:
     
     def _make_api_call(self, endpoint, method="GET", data=None):
         """
-        Make an authenticated call to Microsoft Graph API
+        Make an authenticated call to Microsoft Graph API using application permissions
         
         Args:
             endpoint: API endpoint (e.g., '/users/user@example.com/onlineMeetings')
@@ -139,9 +139,72 @@ class GraphService:
         response.raise_for_status()
         return response.json()
     
+    def _make_api_call_delegated(self, endpoint, access_token, method="GET", data=None):
+        """
+        Make an authenticated call to Microsoft Graph API using delegated permissions
+        
+        Args:
+            endpoint: API endpoint (e.g., '/me/onlineMeetings')
+            access_token: User's access token
+            method: HTTP method (GET, POST, etc.)
+            data: Request body for POST/PATCH requests
+        
+        Returns:
+            Response JSON
+        """
+        if self.use_mock:
+            return {"mock": True, "message": "Using mock data"}
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        url = f"{self.base_url}{endpoint}"
+        
+        if method == "GET":
+            response = requests.get(url, headers=headers)
+        elif method == "POST":
+            response = requests.post(url, headers=headers, json=data)
+        elif method == "PATCH":
+            response = requests.patch(url, headers=headers, json=data)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+        
+        response.raise_for_status()
+        return response.json()
+    
+    def get_user_profile(self, access_token):
+        """
+        Get user profile information using delegated permissions
+        (Only used during OAuth callback to get user info)
+        
+        Args:
+            access_token: User's access token
+        
+        Returns:
+            User profile dictionary
+        """
+        if self.use_mock:
+            return {
+                "id": "mock_user_123",
+                "displayName": "Mock User",
+                "mail": "user@example.com",
+                "userPrincipalName": "user@example.com"
+            }
+        
+        if not access_token:
+            raise Exception("Access token required for user profile")
+        
+        try:
+            response = self._make_api_call_delegated("/me", access_token)
+            return response
+        except Exception as e:
+            raise Exception(f'Failed to fetch user profile: {str(e)}')
+    
     def list_meetings(self, email):
         """
-        Get list of recorded Teams meetings for a user
+        Get list of recorded Teams meetings for a user using APPLICATION permissions
         
         Args:
             email: User email address
@@ -150,11 +213,12 @@ class GraphService:
             List of meeting dictionaries
         """
         if self.use_mock:
+            # In mock mode, return meetings for the specified email
             return self.mock_meetings.get(email, [])
         
-        # Real implementation: Call Graph API to get recorded meetings
+        # Real implementation: Call Graph API using APPLICATION permissions (no user login required)
         try:
-            # Get online meetings for the user
+            # Get online meetings for the user using application permissions
             endpoint = f"/users/{email}/onlineMeetings"
             params = "?$filter=recordingStatus eq 'available'&$top=50"
             response = self._make_api_call(endpoint + params)
@@ -173,12 +237,13 @@ class GraphService:
         except Exception as e:
             raise Exception(f'Failed to fetch Teams meetings: {str(e)}')
     
-    def get_meeting_transcript(self, meeting_id):
+    def get_meeting_transcript(self, meeting_id, email):
         """
-        Get transcript for a Teams meeting
+        Get transcript for a Teams meeting using APPLICATION permissions
         
         Args:
             meeting_id: Meeting ID
+            email: User email address (for looking up meeting in production)
         
         Returns:
             Tuple of (transcript, participants)
@@ -191,15 +256,16 @@ class GraphService:
             for meetings in self.mock_meetings.values():
                 for meeting in meetings:
                     if meeting['meeting_id'] == meeting_id:
-                        participants = meeting.get('participants', [])
+                        participants = [{"email": p, "name": p.split("@")[0].title()} 
+                                       for p in meeting.get('participants', [])]
                         break
             
             return transcript, participants
         
-        # Real implementation: Get transcript from Graph API
+        # Real implementation: Get transcript from Graph API using APPLICATION permissions
         try:
-            # Get meeting recording/transcript
-            endpoint = f"/users/me/onlineMeetings/{meeting_id}/recordings"
+            # Get meeting recording/transcript using application permissions
+            endpoint = f"/users/{email}/onlineMeetings/{meeting_id}/recordings"
             response = self._make_api_call(endpoint)
             
             # Get transcript content
@@ -214,23 +280,25 @@ class GraphService:
                 transcript = "No transcript available for this meeting."
             
             # Get meeting details for participants
-            meeting_endpoint = f"/users/me/onlineMeetings/{meeting_id}"
+            meeting_endpoint = f"/users/{email}/onlineMeetings/{meeting_id}"
             meeting_data = self._make_api_call(meeting_endpoint)
-            participants = [p.get('identity', {}).get('user', {}).get('email') 
+            participants = [{"email": p.get('identity', {}).get('user', {}).get('email'),
+                           "name": p.get('identity', {}).get('user', {}).get('displayName')}
                           for p in meeting_data.get('participants', {}).get('attendees', [])]
             
             return transcript, participants
         except Exception as e:
             raise Exception(f'Failed to fetch Teams meeting data: {str(e)}')
     
-    def send_chat_message(self, meeting_id, summary, participants):
+    def send_chat_message(self, meeting_id, summary, participants, access_token=None):
         """
-        Create Teams chat and send summary to participants
+        Create Teams chat and send summary to participants using delegated permissions
         
         Args:
             meeting_id: Meeting ID
             summary: Summary text to send
-            participants: List of participant email addresses
+            participants: List of participant dictionaries with 'email' and 'name'
+            access_token: Delegated access token (required when not using mock)
         
         Returns:
             Dictionary with success status and chat details
@@ -243,15 +311,19 @@ class GraphService:
                 'participants': participants
             }
         
-        # Real implementation: Create group chat and send message via Graph API
+        if not access_token:
+            raise Exception("Access token required for Teams API calls")
+        
+        # Real implementation: Create group chat and send message via Graph API using delegated permissions
         try:
             # Step 1: Create a group chat with participants
             chat_members = []
-            for participant_email in participants:
+            for participant in participants:
+                email = participant.get('email') if isinstance(participant, dict) else participant
                 chat_members.append({
                     "@odata.type": "#microsoft.graph.aadUserConversationMember",
                     "roles": ["owner"],
-                    "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{participant_email}')"
+                    "user@odata.bind": f"https://graph.microsoft.com/v1.0/users('{email}')"
                 })
             
             chat_data = {
@@ -260,17 +332,18 @@ class GraphService:
                 "members": chat_members
             }
             
-            chat_response = self._make_api_call("/chats", method="POST", data=chat_data)
+            chat_response = self._make_api_call_delegated("/chats", access_token, method="POST", data=chat_data)
             chat_id = chat_response.get('id')
             
             # Step 2: Send the summary message to the chat
             message_data = {
                 "body": {
-                    "content": f"<h2>Meeting Summary</h2><p>{summary}</p>"
+                    "contentType": "html",
+                    "content": f"<h2>Meeting Summary</h2>{summary}"
                 }
             }
             
-            self._make_api_call(f"/chats/{chat_id}/messages", method="POST", data=message_data)
+            self._make_api_call_delegated(f"/chats/{chat_id}/messages", access_token, method="POST", data=message_data)
             
             return {
                 'success': True,
