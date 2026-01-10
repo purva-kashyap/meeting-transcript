@@ -124,24 +124,57 @@ class GraphService:
         
         return self._make_api_call("/me", access_token)
     
-    def list_meetings(self, access_token):
+    def list_meetings(self, access_token, start_date=None, end_date=None):
         """
         Get list of recorded Teams meetings for the authenticated user
         
         Args:
             access_token: User's access token
+            start_date: Start date in YYYY-MM-DD format (optional)
+            end_date: End date in YYYY-MM-DD format (optional)
         
         Returns:
             List of meeting dictionaries
         """
         if self.use_mock:
-            return self.mock_meetings
+            meetings = self.mock_meetings
+            
+            # Filter by date if provided
+            if start_date and end_date:
+                from datetime import datetime
+                start = datetime.strptime(start_date, '%Y-%m-%d')
+                end = datetime.strptime(end_date, '%Y-%m-%d')
+                end = end.replace(hour=23, minute=59, second=59)  # Include entire end date
+                
+                filtered = []
+                for meeting in meetings:
+                    try:
+                        meeting_date = datetime.fromisoformat(meeting['start_time'].replace('Z', '+00:00'))
+                        if start <= meeting_date <= end:
+                            filtered.append(meeting)
+                    except:
+                        # If date parsing fails, include the meeting
+                        filtered.append(meeting)
+                return filtered
+            
+            return meetings
         
         # Real implementation: Call Graph API to get recorded meetings
         try:
             # Get online meetings for the authenticated user
             endpoint = "/me/onlineMeetings"
-            params = "?$filter=recordingStatus eq 'available'&$top=50"
+            
+            # Build filter query
+            filters = ["recordingStatus eq 'available'"]
+            
+            if start_date and end_date:
+                # Add date filtering to OData query
+                filters.append(f"startDateTime ge '{start_date}T00:00:00Z'")
+                filters.append(f"startDateTime le '{end_date}T23:59:59Z'")
+            
+            filter_string = " and ".join(filters)
+            params = f"?$filter={filter_string}&$top=50"
+            
             response = self._make_api_call(endpoint + params, access_token)
             
             meetings = []

@@ -50,6 +50,28 @@
                         >
                     </div>
                     
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="start_date">Start Date:</label>
+                            <input 
+                                type="date" 
+                                id="start_date" 
+                                name="start_date" 
+                                required
+                            >
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="end_date">End Date:</label>
+                            <input 
+                                type="date" 
+                                id="end_date" 
+                                name="end_date" 
+                                required
+                            >
+                        </div>
+                    </div>
+                    
                     <div class="button-group">
                         <button type="button" class="btn btn-zoom" onclick="getZoomMeetings()">
                             📹 Get Zoom Meetings
@@ -98,6 +120,40 @@
             }
             return email;
         }
+        
+        function getDateRange() {
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            
+            if (!startDate || !endDate) {
+                showError('Please select both start and end dates');
+                return null;
+            }
+            
+            // Validate dates
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            if (start > end) {
+                showError('Start date must be before end date');
+                return null;
+            }
+            
+            return { start_date: startDate, end_date: endDate };
+        }
+        
+        function setDefaultDates() {
+            // Set default to last 30 days
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30);
+            
+            document.getElementById('end_date').valueAsDate = endDate;
+            document.getElementById('start_date').valueAsDate = startDate;
+        }
+        
+        // Set default dates on page load
+        window.addEventListener('DOMContentLoaded', setDefaultDates);
 
         function showLoading() {
             document.getElementById('loading').style.display = 'block';
@@ -118,6 +174,9 @@
         async function getZoomMeetings() {
             const email = getEmail();
             if (!email) return;
+            
+            const dateRange = getDateRange();
+            if (!dateRange) return;
 
             showLoading();
 
@@ -127,7 +186,11 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ email: email })
+                    body: JSON.stringify({ 
+                        email: email,
+                        start_date: dateRange.start_date,
+                        end_date: dateRange.end_date
+                    })
                 });
 
                 const data = await response.json();
@@ -136,6 +199,8 @@
                     sessionStorage.setItem('meetings', JSON.stringify(data.meetings));
                     sessionStorage.setItem('email', email);
                     sessionStorage.setItem('meetingType', 'zoom');
+                    sessionStorage.setItem('startDate', dateRange.start_date);
+                    sessionStorage.setItem('endDate', dateRange.end_date);
                     window.location.href = '/meetings.html';
                 } else {
                     showError(data.error || 'Failed to retrieve Zoom meetings');
@@ -152,6 +217,9 @@
                 showError('Please sign in with Microsoft first');
                 return;
             }
+            
+            const dateRange = getDateRange();
+            if (!dateRange) return;
 
             showLoading();
 
@@ -161,7 +229,10 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({})
+                    body: JSON.stringify({
+                        start_date: dateRange.start_date,
+                        end_date: dateRange.end_date
+                    })
                 });
 
                 if (response.status === 401) {
@@ -178,6 +249,8 @@
                     sessionStorage.setItem('meetings', JSON.stringify(data.meetings));
                     sessionStorage.setItem('email', data.email);
                     sessionStorage.setItem('meetingType', 'teams');
+                    sessionStorage.setItem('startDate', dateRange.start_date);
+                    sessionStorage.setItem('endDate', dateRange.end_date);
                     window.location.href = '/meetings.html';
                 } else {
                     showError(data.error || 'Failed to retrieve Teams meetings');

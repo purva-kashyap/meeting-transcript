@@ -275,12 +275,17 @@ def list_zoom_meetings():
     try:
         data = request.get_json()
         email = data.get('email')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
         
         if not email:
             return jsonify({'error': 'Email is required'}), 400
         
-        # Use Zoom service to get recordings
-        recordings = zoom_service.list_recordings(email)
+        if not start_date or not end_date:
+            return jsonify({'error': 'Start date and end date are required'}), 400
+        
+        # Use Zoom service to get recordings with date filtering
+        recordings = zoom_service.list_recordings(email, start_date, end_date)
         
         return jsonify({
             'success': True,
@@ -336,6 +341,13 @@ def list_teams_meetings():
         if not _is_authenticated():
             return jsonify({'error': 'Not authenticated'}), 401
         
+        data = request.get_json()
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        
+        if not start_date or not end_date:
+            return jsonify({'error': 'Start date and end date are required'}), 400
+        
         # Get access token
         access_token = _get_token_from_cache()
         if not access_token and USE_MOCK_DATA:
@@ -344,8 +356,8 @@ def list_teams_meetings():
         if not access_token:
             return jsonify({'error': 'No valid access token'}), 401
         
-        # Use Graph service to get meetings
-        meetings = graph_service.list_meetings(access_token)
+        # Use Graph service to get meetings with date filtering
+        meetings = graph_service.list_meetings(access_token, start_date, end_date)
         
         user_email = session.get('user', {}).get('email', 'user@example.com')
         

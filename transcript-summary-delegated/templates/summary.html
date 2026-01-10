@@ -107,7 +107,7 @@
         function saveEdit() {
             // Save the edited summary
             currentSummary = document.getElementById('summaryEdit').value;
-            document.getElementById('summaryDisplay').textContent = currentSummary;
+            document.getElementById('summaryDisplay').innerHTML = currentSummary;
             
             // Exit edit mode
             isEditing = false;
@@ -226,9 +226,9 @@
                     // Display transcript
                     document.getElementById('transcript').textContent = data.transcript;
                     
-                    // Display summary
+                    // Display summary (render HTML tags)
                     currentSummary = data.summary;
-                    document.getElementById('summaryDisplay').textContent = currentSummary;
+                    document.getElementById('summaryDisplay').innerHTML = currentSummary;
                     
                     // Update page title
                     const titleElement = document.getElementById('pageTitle');

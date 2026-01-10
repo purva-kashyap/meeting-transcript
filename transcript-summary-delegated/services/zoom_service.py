@@ -114,15 +114,55 @@ Speaker 1 (01:00): I'm glad you like it. Let me show you the reporting capabilit
         except Exception as e:
             raise Exception(f'Failed to fetch Zoom user: {str(e)}')
     
-    def list_recordings(self, email):
-        """Get list of recorded meetings for a user"""
+    def list_recordings(self, email, start_date=None, end_date=None):
+        """
+        Get list of recorded meetings for a user
+        
+        Args:
+            email: User's email address
+            start_date: Start date in YYYY-MM-DD format (optional)
+            end_date: End date in YYYY-MM-DD format (optional)
+        
+        Returns:
+            List of recording dictionaries
+        """
         if self.use_mock:
             user_id = self.mock_users.get(email, "zoom_user_default")
-            return self.mock_recordings.get(user_id, [])
+            recordings = self.mock_recordings.get(user_id, [])
+            
+            # Filter by date if provided
+            if start_date and end_date:
+                from datetime import datetime
+                start = datetime.strptime(start_date, '%Y-%m-%d')
+                end = datetime.strptime(end_date, '%Y-%m-%d')
+                
+                filtered = []
+                for rec in recordings:
+                    try:
+                        rec_date = datetime.fromisoformat(rec['start_time'].replace('Z', '+00:00'))
+                        if start <= rec_date <= end:
+                            filtered.append(rec)
+                    except:
+                        # If date parsing fails, include the recording
+                        filtered.append(rec)
+                return filtered
+            
+            return recordings
         
         try:
             user_id = self.get_user_id(email)
             endpoint = f"/v2/users/{user_id}/recordings"
+            
+            # Add date parameters to query string if provided
+            params = []
+            if start_date:
+                params.append(f"from={start_date}")
+            if end_date:
+                params.append(f"to={end_date}")
+            
+            if params:
+                endpoint += "?" + "&".join(params)
+            
             response = self._make_api_call(endpoint)
             
             recordings = []

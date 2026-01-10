@@ -23,21 +23,25 @@ class LLMService:
     def _generate_mock_summary(self, transcript):
         """Generate a mock summary using simple logic (simulating LLM)"""
         lines = transcript.split('\n')
-        summary = "Meeting Summary:\n\n"
-        summary += "Key Discussion Points:\n"
+        
+        # Generate HTML-formatted summary
+        summary = "<h3>Meeting Summary</h3>\n\n"
+        summary += "<h4>Key Discussion Points:</h4>\n<ul>\n"
         
         keywords = ['roadmap', 'sprint', 'review', 'demo', 'sync', 'architecture', 'support']
         found_keywords = [kw for kw in keywords if kw.lower() in transcript.lower()]
         
         if found_keywords:
-            summary += f"- The meeting covered topics including: {', '.join(found_keywords)}\n"
+            summary += f"<li>The meeting covered topics including: <strong>{', '.join(found_keywords)}</strong></li>\n"
         
-        summary += f"- Total speakers/participants: {len([line for line in lines if 'Speaker' in line or '[' in line])}\n"
-        summary += f"- Meeting duration: Approximately {len(lines) * 10} seconds\n\n"
+        summary += f"<li>Total speakers/participants: <strong>{len([line for line in lines if 'Speaker' in line or '[' in line])}</strong></li>\n"
+        summary += f"<li>Meeting duration: Approximately <strong>{len(lines) * 10} seconds</strong></li>\n"
+        summary += "</ul>\n\n"
         
-        summary += "Action Items:\n"
-        summary += "- Follow up on discussed topics\n"
-        summary += "- Schedule next meeting if needed\n"
-        summary += "- Share meeting notes with team\n"
+        summary += "<h4>Action Items:</h4>\n<ol>\n"
+        summary += "<li>Follow up on discussed topics</li>\n"
+        summary += "<li>Schedule next meeting if needed</li>\n"
+        summary += "<li>Share meeting notes with team</li>\n"
+        summary += "</ol>\n"
         
         return summary
