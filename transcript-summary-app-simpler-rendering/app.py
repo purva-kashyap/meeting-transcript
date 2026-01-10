@@ -19,10 +19,19 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-product
 # Configure server-side session
 app.config['SESSION_TYPE'] = os.getenv('SESSION_TYPE', 'filesystem')
 app.config['SESSION_PERMANENT'] = os.getenv('SESSION_PERMANENT', 'false').lower() == 'true'
+
+# Session cookie configuration for OAuth redirects
+# These settings ensure session cookies persist during OAuth redirects to Microsoft
+app.config['SESSION_COOKIE_NAME'] = 'flask_session'
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access (security)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Allow cookies during OAuth redirects
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+
 Session(app)
 
 # Configuration
 USE_MOCK_DATA = os.getenv('USE_MOCK_DATA', 'true').lower() == 'true'
+BYPASS_STATE_CHECK = os.getenv('BYPASS_STATE_CHECK', 'false').lower() == 'true'
 
 # Initialize services
 auth_service = AuthService(use_mock=USE_MOCK_DATA)
@@ -83,6 +92,11 @@ def auth_login():
     session["state"] = state
     session["email"] = request.args.get('email', '')  # Store email if provided
     
+    # Debug: Log session information
+    print(f"DEBUG /auth/login: Generated state: {state}")
+    print(f"DEBUG /auth/login: Session ID: {request.cookies.get('session')}")
+    print(f"DEBUG /auth/login: Session contents: {dict(session)}")
+    
     # Check if we need to return to a specific page after login
     return_type = request.args.get('return_type')
     return_id = request.args.get('return_id')
@@ -94,6 +108,7 @@ def auth_login():
     
     # Get authorization URL
     auth_url = auth_service.get_login_url(state=state)
+    print(f"DEBUG /auth/login: Redirecting to: {auth_url}")
     
     return redirect(auth_url)
 
@@ -154,9 +169,29 @@ def auth_callback():
     if USE_MOCK_DATA:
         return redirect(url_for('auth_mock_login'))
     
-    # Verify state to prevent CSRF
-    if request.args.get('state') != session.get("state"):
-        return "State mismatch error", 400
+    # Debug: Log state information
+    received_state = request.args.get('state')
+    session_state = session.get("state")
+    print(f"DEBUG: Received state: {received_state}")
+    print(f"DEBUG: Session state: {session_state}")
+    print(f"DEBUG: Session ID: {request.cookies.get('session')}")
+    print(f"DEBUG: Session contents: {dict(session)}")
+    print(f"DEBUG: BYPASS_STATE_CHECK: {BYPASS_STATE_CHECK}")
+    
+    # Verify state to prevent CSRF (unless bypassed for debugging)
+    if not BYPASS_STATE_CHECK and received_state != session_state:
+        error_msg = f"State mismatch error. Received: {received_state}, Expected: {session_state}"
+        print(f"ERROR: {error_msg}")
+        print(f"\nTROUBLESHOOTING:")
+        print(f"1. Session cookie may have been lost during OAuth redirect")
+        print(f"2. Check that you're using consistent URLs (localhost vs 127.0.0.1)")
+        print(f"3. Check browser cookies (F12 → Application → Cookies)")
+        print(f"4. To bypass this check temporarily (DEBUG ONLY), set BYPASS_STATE_CHECK=true in .env")
+        return f"Authentication error: {error_msg}<br><br>This usually means the session was lost. Try again and ensure you're using the same URL (localhost vs 127.0.0.1).", 400
+    
+    if BYPASS_STATE_CHECK:
+        print(f"⚠️  WARNING: State check bypassed! This is a security risk - only use for debugging!")
+        print(f"⚠️  Please fix your session cookie configuration and set BYPASS_STATE_CHECK=false")
     
     if "error" in request.args:
         return f"Authentication error: {request.args.get('error_description', request.args.get('error'))}", 400
@@ -241,6 +276,23 @@ def debug_session():
         'is_authenticated': _is_authenticated(),
         'use_mock_data': USE_MOCK_DATA,
         'session_id': request.cookies.get('session')
+    })
+
+
+@app.route('/debug/msal-config')
+def debug_msal_config():
+    """Debug MSAL configuration"""
+    if not app.debug:
+        return "Debug endpoint only available in debug mode", 403
+    
+    return jsonify({
+        'use_mock_data': USE_MOCK_DATA,
+        'client_id': auth_service.client_id[:10] + '...' if auth_service.client_id else 'NOT SET',
+        'client_secret_set': bool(auth_service.client_secret),
+        'client_secret_length': len(auth_service.client_secret) if auth_service.client_secret else 0,
+        'authority': auth_service.authority,
+        'redirect_uri': auth_service.redirect_uri,
+        'scopes': auth_service.scopes
     })
 
 
