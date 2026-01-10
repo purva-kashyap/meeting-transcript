@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import os
 import uuid
+from datetime import timedelta
 from dotenv import load_dotenv
 from flask_session import Session
 import msal
+import logging
 
 from services.auth_service import AuthService
 from services.zoom_service import ZoomService
@@ -16,9 +18,22 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+app.logger.setLevel(logging.INFO)
+
 # Configure server-side session
 app.config['SESSION_TYPE'] = os.getenv('SESSION_TYPE', 'filesystem')
 app.config['SESSION_PERMANENT'] = os.getenv('SESSION_PERMANENT', 'false').lower() == 'true'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+
+# Configure session cookies for OAuth reliability
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Only enable Secure in production with HTTPS
+if os.getenv('FLASK_ENV') == 'production':
+    app.config['SESSION_COOKIE_SECURE'] = True
+
 Session(app)
 
 # Configuration
@@ -140,20 +155,29 @@ def auth_mock_callback():
     return jsonify({'success': True, 'redirect': redirect_url})
 
 
-@app.route('/auth/callback')
-def auth_callback():
-    """Handle OAuth callback from Microsoft"""
+@app.route('/redirect')
+def auth_redirect():
+    """Handle OAuth redirect from Microsoft"""
     if USE_MOCK_DATA:
         return redirect(url_for('auth_mock_login'))
     
     # Verify state to prevent CSRF
-    if request.args.get('state') != session.get("state"):
+    received_state = request.args.get('state')
+    session_state = session.get("state")
+    
+    app.logger.info(f"OAuth callback - Received state: {received_state}, Session state: {session_state}")
+    
+    if received_state != session_state:
+        app.logger.error("State mismatch in OAuth callback")
         return "State mismatch error", 400
     
     if "error" in request.args:
-        return f"Authentication error: {request.args.get('error_description', request.args.get('error'))}", 400
+        error_msg = request.args.get('error_description', request.args.get('error'))
+        app.logger.error(f"OAuth error: {error_msg}")
+        return f"Authentication error: {error_msg}", 400
     
     if "code" not in request.args:
+        app.logger.error("No authorization code received in OAuth callback")
         return "No authorization code received", 400
     
     # Exchange authorization code for token
@@ -166,6 +190,7 @@ def auth_callback():
         
         if "access_token" in result:
             _save_cache(cache)
+            app.logger.info("Successfully acquired access token")
             
             # Get user profile
             user_profile = graph_service.get_user_profile(result["access_token"])
@@ -173,17 +198,22 @@ def auth_callback():
                 "name": user_profile.get("displayName"),
                 "email": user_profile.get("mail") or user_profile.get("userPrincipalName")
             }
+            app.logger.info(f"User authenticated: {session['user']['email']}")
             
             # Check if user should return to summary page
             if session.get('returnToSummary'):
                 summary_data = session.pop('returnToSummary')
+                app.logger.info(f"Redirecting to summary page: {summary_data}")
                 return redirect(f"/summary.html?type={summary_data['type']}&id={summary_data['id']}")
             
             return redirect(url_for('home'))
         else:
-            return f"Failed to acquire token: {result.get('error_description', 'Unknown error')}", 400
+            error_msg = result.get('error_description', 'Unknown error')
+            app.logger.error(f"Failed to acquire token: {error_msg}")
+            return f"Failed to acquire token: {error_msg}", 400
     
     except Exception as e:
+        app.logger.error(f"Authentication failed: {str(e)}", exc_info=True)
         return f"Authentication failed: {str(e)}", 500
 
 
@@ -266,20 +296,36 @@ def list_zoom_meetings():
 def get_zoom_meeting_summary(meeting_id):
     """Get transcript and summary for a Zoom meeting"""
     try:
+        # Check if summary is already cached in session
+        cache_key = f'zoom_{meeting_id}'
+        if 'summaries' in session and cache_key in session['summaries']:
+            cached_data = session['summaries'][cache_key]
+            app.logger.info(f"Returning cached summary for Zoom meeting {meeting_id}")
+            return jsonify(cached_data)
+        
         # Get transcript from Zoom service
         transcript = zoom_service.get_meeting_transcript(meeting_id)
         
         # Generate summary using LLM service
         summary = llm_service.generate_summary(transcript)
         
-        return jsonify({
+        result = {
             'success': True,
             'meeting_id': meeting_id,
             'transcript': transcript,
             'summary': summary
-        })
+        }
+        
+        # Cache the result in session
+        if 'summaries' not in session:
+            session['summaries'] = {}
+        session['summaries'][cache_key] = result
+        app.logger.info(f"Cached summary for Zoom meeting {meeting_id}")
+        
+        return jsonify(result)
     
     except Exception as e:
+        app.logger.error(f"Error getting Zoom summary: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -320,6 +366,13 @@ def get_teams_meeting_summary(meeting_id):
         if not _is_authenticated():
             return jsonify({'error': 'Not authenticated'}), 401
         
+        # Check if summary is already cached in session
+        cache_key = f'teams_{meeting_id}'
+        if 'summaries' in session and cache_key in session['summaries']:
+            cached_data = session['summaries'][cache_key]
+            app.logger.info(f"Returning cached summary for Teams meeting {meeting_id}")
+            return jsonify(cached_data)
+        
         # Get access token
         access_token = _get_token_from_cache()
         if not access_token and USE_MOCK_DATA:
@@ -334,15 +387,24 @@ def get_teams_meeting_summary(meeting_id):
         # Generate summary using LLM service
         summary = llm_service.generate_summary(transcript)
         
-        return jsonify({
+        result = {
             'success': True,
             'meeting_id': meeting_id,
             'transcript': transcript,
             'summary': summary,
             'participants': participants
-        })
+        }
+        
+        # Cache the result in session
+        if 'summaries' not in session:
+            session['summaries'] = {}
+        session['summaries'][cache_key] = result
+        app.logger.info(f"Cached summary for Teams meeting {meeting_id}")
+        
+        return jsonify(result)
     
     except Exception as e:
+        app.logger.error(f"Error getting Teams summary: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

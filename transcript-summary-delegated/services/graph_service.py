@@ -63,6 +63,9 @@ class GraphService:
         Returns:
             Response JSON
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if self.use_mock:
             return {"mock": True, "message": "Using mock data"}
         
@@ -73,17 +76,33 @@ class GraphService:
         
         url = f"{self.base_url}{endpoint}"
         
-        if method == "GET":
-            response = requests.get(url, headers=headers)
-        elif method == "POST":
-            response = requests.post(url, headers=headers, json=data)
-        elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=data)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
+        try:
+            if method == "GET":
+                response = requests.get(url, headers=headers)
+            elif method == "POST":
+                response = requests.post(url, headers=headers, json=data)
+            elif method == "PATCH":
+                response = requests.patch(url, headers=headers, json=data)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            response.raise_for_status()
+            return response.json()
         
-        response.raise_for_status()
-        return response.json()
+        except requests.exceptions.HTTPError as e:
+            error_detail = "Unknown error"
+            try:
+                error_json = e.response.json()
+                error_detail = error_json.get('error', {}).get('message', str(e))
+            except:
+                error_detail = e.response.text if hasattr(e.response, 'text') else str(e)
+            
+            logger.error(f"Graph API Error: {method} {url} - Status: {e.response.status_code} - {error_detail}")
+            raise Exception(f"Graph API error ({e.response.status_code}): {error_detail}")
+        
+        except Exception as e:
+            logger.error(f"Unexpected error calling Graph API: {str(e)}")
+            raise
     
     def get_user_profile(self, access_token):
         """

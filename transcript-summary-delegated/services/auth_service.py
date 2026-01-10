@@ -16,7 +16,7 @@ class AuthService:
         self.client_id = os.getenv('MICROSOFT_CLIENT_ID', '')
         self.client_secret = os.getenv('MICROSOFT_CLIENT_SECRET', '')
         self.authority = os.getenv('MICROSOFT_AUTHORITY', 'https://login.microsoftonline.com/common')
-        self.redirect_uri = os.getenv('MICROSOFT_REDIRECT_URI', 'http://localhost:5001/auth/callback')
+        self.redirect_uri = os.getenv('MICROSOFT_REDIRECT_URI', 'http://localhost:5001/redirect')
         
         # Delegated permissions (user consent required)
         self.scopes = [
