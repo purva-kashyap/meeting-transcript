@@ -342,10 +342,27 @@ def list_zoom_meetings():
 def get_zoom_meeting_summary(meeting_id):
     """Get transcript and summary for a Zoom meeting and render summary template"""
     try:
+        # Check if we already have this summary cached in session
+        cache_key = f'summary_zoom_{meeting_id}'
+        cached_data = session.get(cache_key)
+        
+        if cached_data:
+            print(f"DEBUG: Using cached summary for Zoom meeting {meeting_id}")
+            return render_template('summary.html', 
+                                 meeting_id=cached_data['meeting_id'],
+                                 transcript=cached_data['transcript'],
+                                 summary=cached_data['summary'],
+                                 participants=cached_data['participants'],
+                                 meetingType='zoom',
+                                 authenticated=_is_authenticated(),
+                                 user=session.get('user'),
+                                 cached=True)
+        
         # Get transcript from Zoom service
         transcript = zoom_service.get_meeting_transcript(meeting_id)
 
-        # Generate summary using LLM service
+        # Generate summary using LLM service (expensive operation)
+        print(f"DEBUG: Generating NEW summary for Zoom meeting {meeting_id}")
         summary = llm_service.generate_summary(transcript)
 
         # Mock participants for Zoom meetings (in real scenario, fetch from Zoom API)
@@ -355,6 +372,14 @@ def get_zoom_meeting_summary(meeting_id):
             {"email": "participant3@example.com", "name": "Carol Williams"}
         ]
 
+        # Cache the result in session
+        session[cache_key] = {
+            'meeting_id': meeting_id,
+            'transcript': transcript,
+            'summary': summary,
+            'participants': participants
+        }
+
         return render_template('summary.html', 
                              meeting_id=meeting_id, 
                              transcript=transcript, 
@@ -362,7 +387,8 @@ def get_zoom_meeting_summary(meeting_id):
                              participants=participants, 
                              meetingType='zoom',
                              authenticated=_is_authenticated(),
-                             user=session.get('user'))
+                             user=session.get('user'),
+                             cached=False)
 
     except Exception as e:
         return render_template('meetings.html', error=str(e)), 500
@@ -408,11 +434,36 @@ def get_teams_meeting_summary(meeting_id):
         # Get email from query parameter
         email = request.args.get('email', 'user@example.com')
         
+        # Check if we already have this summary cached in session
+        cache_key = f'summary_{meeting_id}'
+        cached_data = session.get(cache_key)
+        
+        if cached_data:
+            print(f"DEBUG: Using cached summary for meeting {meeting_id}")
+            return render_template('summary.html', 
+                                 meeting_id=cached_data['meeting_id'],
+                                 transcript=cached_data['transcript'],
+                                 summary=cached_data['summary'],
+                                 participants=cached_data['participants'],
+                                 meetingType='teams',
+                                 authenticated=_is_authenticated(),
+                                 user=session.get('user'),
+                                 cached=True)
+        
         # Get transcript and participants from Graph service using APPLICATION permissions
         transcript, participants = graph_service.get_meeting_transcript(meeting_id, email)
 
-        # Generate summary using LLM service
+        # Generate summary using LLM service (expensive operation)
+        print(f"DEBUG: Generating NEW summary for meeting {meeting_id}")
         summary = llm_service.generate_summary(transcript)
+
+        # Cache the result in session (survives OAuth redirects)
+        session[cache_key] = {
+            'meeting_id': meeting_id,
+            'transcript': transcript,
+            'summary': summary,
+            'participants': participants
+        }
 
         return render_template('summary.html', 
                              meeting_id=meeting_id, 
@@ -421,7 +472,8 @@ def get_teams_meeting_summary(meeting_id):
                              participants=participants, 
                              meetingType='teams',
                              authenticated=_is_authenticated(),
-                             user=session.get('user'))
+                             user=session.get('user'),
+                             cached=False)
 
     except Exception as e:
         return render_template('meetings.html', error=str(e)), 500
