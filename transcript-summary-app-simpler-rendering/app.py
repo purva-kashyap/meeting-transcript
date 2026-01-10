@@ -100,14 +100,26 @@ def auth_login():
     # Check if we need to return to a specific page after login
     return_type = request.args.get('return_type')
     return_id = request.args.get('return_id')
+    return_email = request.args.get('email', '')
+    
     if return_type and return_id:
         session['returnToSummary'] = {
             'type': return_type,
-            'id': return_id
+            'id': return_id,
+            'email': return_email
         }
+        print(f"DEBUG /auth/login: Set returnToSummary = {session['returnToSummary']}")
+        
+        # WORKAROUND: Also encode in state parameter as backup
+        # This ensures we can recover the return URL even if session is lost
+        state_with_return = f"{state}|{return_type}|{return_id}|{return_email}"
+        session["state"] = state_with_return
+        print(f"DEBUG /auth/login: Encoded return info in state for session recovery")
+    else:
+        print(f"DEBUG /auth/login: No return_type/return_id provided (return_type={return_type}, return_id={return_id})")
     
     # Get authorization URL
-    auth_url = auth_service.get_login_url(state=state)
+    auth_url = auth_service.get_login_url(state=session["state"])
     print(f"DEBUG /auth/login: Redirecting to: {auth_url}")
     
     return redirect(auth_url)
@@ -178,9 +190,17 @@ def auth_callback():
     print(f"DEBUG: Session contents: {dict(session)}")
     print(f"DEBUG: BYPASS_STATE_CHECK: {BYPASS_STATE_CHECK}")
     
+    # Extract base state and return info from received state (if encoded)
+    received_state_parts = received_state.split('|') if received_state else []
+    received_base_state = received_state_parts[0] if received_state_parts else received_state
+    
+    # Extract base state from session state (if encoded)
+    session_state_parts = session_state.split('|') if session_state else []
+    session_base_state = session_state_parts[0] if session_state_parts else session_state
+    
     # Verify state to prevent CSRF (unless bypassed for debugging)
-    if not BYPASS_STATE_CHECK and received_state != session_state:
-        error_msg = f"State mismatch error. Received: {received_state}, Expected: {session_state}"
+    if not BYPASS_STATE_CHECK and received_base_state != session_base_state:
+        error_msg = f"State mismatch error. Received: {received_base_state}, Expected: {session_base_state}"
         print(f"ERROR: {error_msg}")
         print(f"\nTROUBLESHOOTING:")
         print(f"1. Session cookie may have been lost during OAuth redirect")
@@ -218,18 +238,44 @@ def auth_callback():
             }
             
             # Check if user should return to summary page
-            if session.get('returnToSummary'):
-                summary_data = session.pop('returnToSummary')
-                meeting_type = summary_data['type']
-                meeting_id = summary_data['id']
+            print(f"DEBUG /auth/callback: Checking returnToSummary in session...")
+            print(f"DEBUG /auth/callback: returnToSummary = {session.get('returnToSummary')}")
+            
+            # Try to get return info from session first
+            return_info = session.get('returnToSummary')
+            
+            # If not in session, try to recover from state parameter (session loss workaround)
+            if not return_info and len(received_state_parts) >= 3:
+                print(f"DEBUG /auth/callback: returnToSummary not in session, recovering from state parameter")
+                return_info = {
+                    'type': received_state_parts[1],
+                    'id': received_state_parts[2],
+                    'email': received_state_parts[3] if len(received_state_parts) > 3 else ''
+                }
+                print(f"DEBUG /auth/callback: Recovered returnToSummary = {return_info}")
+            
+            if return_info:
+                meeting_type = return_info['type']
+                meeting_id = return_info['id']
+                
+                # Remove from session if it was there
+                if 'returnToSummary' in session:
+                    session.pop('returnToSummary')
+                
+                print(f"DEBUG /auth/callback: Redirecting to summary page: type={meeting_type}, id={meeting_id}")
                 
                 # Construct proper route URL
                 if meeting_type == 'teams':
-                    email = session.get('email', user_profile.get('mail', 'user@example.com'))
-                    return redirect(f"/teams/meeting/{meeting_id}/summary?email={email}")
+                    email = return_info.get('email') or session.get('email') or user_profile.get('mail', 'user@example.com')
+                    redirect_url = f"/teams/meeting/{meeting_id}/summary?email={email}"
+                    print(f"DEBUG /auth/callback: Teams redirect URL: {redirect_url}")
+                    return redirect(redirect_url)
                 else:
-                    return redirect(f"/zoom/meeting/{meeting_id}/summary")
+                    redirect_url = f"/zoom/meeting/{meeting_id}/summary"
+                    print(f"DEBUG /auth/callback: Zoom redirect URL: {redirect_url}")
+                    return redirect(redirect_url)
             
+            print(f"DEBUG /auth/callback: No returnToSummary found, redirecting to home")
             return redirect(url_for('home'))
         else:
             return f"Failed to acquire token: {result.get('error_description', 'Unknown error')}", 400
@@ -448,6 +494,7 @@ def get_teams_meeting_summary(meeting_id):
                                  meetingType='teams',
                                  authenticated=_is_authenticated(),
                                  user=session.get('user'),
+                                 email=email,
                                  cached=True)
         
         # Get transcript and participants from Graph service using APPLICATION permissions
@@ -473,6 +520,7 @@ def get_teams_meeting_summary(meeting_id):
                              meetingType='teams',
                              authenticated=_is_authenticated(),
                              user=session.get('user'),
+                             email=email,
                              cached=False)
 
     except Exception as e:

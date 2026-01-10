@@ -129,7 +129,8 @@
         function loginToSend() {
             const meetingId = '{{ meeting_id or "" }}';
             const meetingType = '{{ meetingType or "" }}';
-            const loginUrl = `/auth/login?return_type=${meetingType}&return_id=${meetingId}`;
+            const email = '{{ email or "" }}';
+            const loginUrl = `/auth/login?return_type=${meetingType}&return_id=${meetingId}&email=${encodeURIComponent(email)}`;
             
             // For simplicity and to avoid session issues with popups, always redirect in same window
             // This ensures the session cookie is properly set and recognized
