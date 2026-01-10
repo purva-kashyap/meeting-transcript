@@ -4,6 +4,8 @@ import uuid
 from dotenv import load_dotenv
 from flask_session import Session
 import msal
+import base64
+import json
 
 from services.auth_service import AuthService
 from services.zoom_service import ZoomService
@@ -112,15 +114,27 @@ def auth_login():
         
         # WORKAROUND: Also encode in state parameter as backup
         # This ensures we can recover the return URL even if session is lost
-        state_with_return = f"{state}|{return_type}|{return_id}|{return_email}"
-        session["state"] = state_with_return
+        # Use base64 encoding to make it URL-safe
+        return_data = {
+            'uuid': state,
+            'type': return_type,
+            'id': return_id,
+            'email': return_email
+        }
+        return_json = json.dumps(return_data)
+        state_with_return = base64.urlsafe_b64encode(return_json.encode()).decode()
+        session["state"] = state
+        session["encoded_state"] = state_with_return
         print(f"DEBUG /auth/login: Encoded return info in state for session recovery")
+        print(f"DEBUG /auth/login: Using base64 encoded state: {state_with_return[:20]}...")
     else:
         print(f"DEBUG /auth/login: No return_type/return_id provided (return_type={return_type}, return_id={return_id})")
+        session["encoded_state"] = None
     
-    # Get authorization URL
-    auth_url = auth_service.get_login_url(state=session["state"])
-    print(f"DEBUG /auth/login: Redirecting to: {auth_url}")
+    # Get authorization URL - always use the clean UUID state
+    # The encoded state is stored in session for recovery
+    auth_url = auth_service.get_login_url(state=state)
+    print(f"DEBUG /auth/login: Redirecting to: {auth_url[:100]}...")
     
     return redirect(auth_url)
 
@@ -184,19 +198,17 @@ def auth_callback():
     # Debug: Log state information
     received_state = request.args.get('state')
     session_state = session.get("state")
+    encoded_state = session.get("encoded_state")
     print(f"DEBUG: Received state: {received_state}")
     print(f"DEBUG: Session state: {session_state}")
+    print(f"DEBUG: Encoded state in session: {encoded_state[:20] if encoded_state else None}...")
     print(f"DEBUG: Session ID: {request.cookies.get('session')}")
     print(f"DEBUG: Session contents: {dict(session)}")
     print(f"DEBUG: BYPASS_STATE_CHECK: {BYPASS_STATE_CHECK}")
     
-    # Extract base state and return info from received state (if encoded)
-    received_state_parts = received_state.split('|') if received_state else []
-    received_base_state = received_state_parts[0] if received_state_parts else received_state
-    
-    # Extract base state from session state (if encoded)
-    session_state_parts = session_state.split('|') if session_state else []
-    session_base_state = session_state_parts[0] if session_state_parts else session_state
+    # State is now a clean UUID - no need to parse
+    received_base_state = received_state
+    session_base_state = session_state
     
     # Verify state to prevent CSRF (unless bypassed for debugging)
     if not BYPASS_STATE_CHECK and received_base_state != session_base_state:
@@ -244,15 +256,20 @@ def auth_callback():
             # Try to get return info from session first
             return_info = session.get('returnToSummary')
             
-            # If not in session, try to recover from state parameter (session loss workaround)
-            if not return_info and len(received_state_parts) >= 3:
-                print(f"DEBUG /auth/callback: returnToSummary not in session, recovering from state parameter")
-                return_info = {
-                    'type': received_state_parts[1],
-                    'id': received_state_parts[2],
-                    'email': received_state_parts[3] if len(received_state_parts) > 3 else ''
-                }
-                print(f"DEBUG /auth/callback: Recovered returnToSummary = {return_info}")
+            # If not in session, try to recover from encoded_state (session loss workaround)
+            if not return_info and encoded_state:
+                try:
+                    print(f"DEBUG /auth/callback: returnToSummary not in session, recovering from encoded state")
+                    decoded_json = base64.urlsafe_b64decode(encoded_state.encode()).decode()
+                    return_data = json.loads(decoded_json)
+                    return_info = {
+                        'type': return_data.get('type'),
+                        'id': return_data.get('id'),
+                        'email': return_data.get('email', '')
+                    }
+                    print(f"DEBUG /auth/callback: Recovered returnToSummary = {return_info}")
+                except Exception as e:
+                    print(f"ERROR /auth/callback: Failed to decode encoded_state: {e}")
             
             if return_info:
                 meeting_type = return_info['type']
@@ -261,6 +278,8 @@ def auth_callback():
                 # Remove from session if it was there
                 if 'returnToSummary' in session:
                     session.pop('returnToSummary')
+                if 'encoded_state' in session:
+                    session.pop('encoded_state')
                 
                 print(f"DEBUG /auth/callback: Redirecting to summary page: type={meeting_type}, id={meeting_id}")
                 
@@ -476,6 +495,11 @@ def list_teams_meetings():
 def get_teams_meeting_summary(meeting_id):
     """Get transcript and summary for a Teams meeting and render summary template"""
     try:
+        # Debug logging
+        print(f"DEBUG: /teams/meeting/{meeting_id}/summary called")
+        print(f"DEBUG: Query params: {dict(request.args)}")
+        print(f"DEBUG: Authenticated: {_is_authenticated()}")
+        
         # No authentication required for viewing - using application permissions
         # Get email from query parameter
         email = request.args.get('email', 'user@example.com')
